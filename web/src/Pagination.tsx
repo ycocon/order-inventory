@@ -12,7 +12,7 @@ export function Pagination({ label, page, pageSize, total, onPage }: {
     <span aria-live="polite">{(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}</span>
     <div>
       <button type="button" className="secondary" disabled={page === 1} onClick={() => onPage(page - 1)}>Previous</button>
-      <button type="button" className="secondary" disabled={page === last} onClick={() => onPage(page + 1)}>Next</button>
+      <button type="button" className="primary" disabled={page === last} onClick={() => onPage(page + 1)}>Next</button>
     </div>
   </nav>;
 }

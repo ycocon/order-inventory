@@ -8,6 +8,7 @@ export type Order = { orderId: string; status: 'awaiting_payment' | 'confirmed' 
   lines: { sku: string; productName: string; quantity: number; unitPriceMinor: number }[] };
 
 const checkoutStorageKey = (email: string) => `retail.checkout:${email}`;
+const orderDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 export const formatMoney = (amount: number, currency = 'USD') =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount / 100);
 
@@ -80,15 +81,15 @@ export function Basket({ email, products, quantities, pending, csrfToken, onChan
   }
 
   return <section className="catalog-card basket" aria-labelledby="basket-title">
-    <div className="basket-header"><h2 id="basket-title">Basket</h2><span className="nav-count">{lines.length}</span></div>
-    {lines.length === 0 ? <div className="basket-empty"><strong>Your basket is empty</strong><p>Add products from the catalog to reserve them together.</p></div> : <form onSubmit={submit} className="form-stack">
-      {pending && !busy && <p className="notice">Checkout confirmation is pending. Retry to recover the same order.</p>}
-      <ul>{lines.map(([sku, quantity], index) => {
+    <div className="basket-header"><h2 id="basket-title" tabIndex={-1}>Basket</h2><span className="nav-count">{lines.length}</span></div>
+    {lines.length === 0 ? <div className="basket-empty"><strong>Your basket is empty</strong><p>Add a product to get started.</p></div> : <form onSubmit={submit} className="form-stack">
+      {pending && !busy && <p className="notice" role="status">Checkout confirmation is pending. Retry to recover the same order.</p>}
+      <ul className="basket-lines">{lines.map(([sku, quantity], index) => {
         const name = products.find(product => product.sku === sku)?.name ?? sku;
         return <li key={sku}>
           <div><strong>{name}</strong><span className="sku">{sku}</span>{estimates[index] !== null && <span className="basket-line-price">{formatMoney(estimates[index])}</span>}</div>
           <label className="basket-quantity">Quantity
-            <input aria-label={`Quantity for ${name}`} type="number" min="1" max="2147483647" step="1"
+            <input aria-label={`Quantity for ${name}`} type="number" inputMode="numeric" min="1" max="2147483647" step="1"
               required disabled={pending !== null} value={quantity} onChange={event => onChange(sku, event.target.value)} />
           </label>
           {!pending && <button className="text-button" type="button" aria-label={`Remove ${name}`} onClick={() => onChange(sku, null)}>Remove</button>}
@@ -98,6 +99,7 @@ export function Basket({ email, products, quantities, pending, csrfToken, onChan
       <div className="basket-footer">
         {showSubtotal && <div className="basket-total"><span>Estimated subtotal</span><strong className="numeric">{formatMoney(subtotal)}</strong></div>}
         <button className="primary" disabled={busy}>{busy ? 'Submitting…' : pending ? 'Retry checkout' : 'Submit order'}</button>
+        {!pending && <p className="muted basket-help">Stock is reserved when you submit your order.</p>}
       </div>
     </form>}
   </section>;
@@ -108,19 +110,41 @@ export function OrderHistory({ orders, onRefresh }: { orders: Order[]; onRefresh
   const pageSize = 5;
   const page = Math.min(currentPage, Math.max(1, Math.ceil(orders.length / pageSize)));
   return <section className="catalog-card basket history" aria-labelledby="orders-title">
-    <div className="basket-header"><h2 id="orders-title">Recent orders</h2>
+    <div className="basket-header"><h2 id="orders-title" tabIndex={-1}>Recent orders</h2>
       <button className="secondary compact-button" type="button" onClick={onRefresh}>Refresh orders</button>
     </div>
     {orders.length === 0 ? <p className="muted">Submitted orders will appear here.</p> : <ul className="order-list">{orders.slice((page - 1) * pageSize, page * pageSize).map(order =>
       <li key={order.orderId}>
-        <div>
-          <span className={`status order-${order.status}`} role="status">{orderLabel(order)}</span>
+        <div className="order-list-summary">
+          <strong className="order-items">{order.lines.map(line => `${line.quantity} × ${line.productName}`).join(', ')}</strong>
+          <time dateTime={order.createdAt}>{orderDate.format(new Date(order.createdAt))}</time>
           <span className="sku order-reference">Order {order.orderId}</span>
-          <span className="order-items">{order.lines.map(line => `${line.quantity} × ${line.productName}`).join(', ')}</span>
         </div>
-        <strong className="numeric">{formatMoney(order.totalMinor, order.currency)}</strong>
+        <div className="order-list-actions">
+          <div><span className={`status order-${order.status}`} role="status">{orderLabel(order)}</span>
+            <strong className="numeric">{formatMoney(order.totalMinor, order.currency)}</strong></div>
+          <CopyOrderReference orderId={order.orderId} />
+        </div>
       </li>,
     )}</ul>}
     <Pagination label="Order pages" page={page} pageSize={pageSize} total={orders.length} onPage={setPage} />
   </section>;
+}
+
+function CopyOrderReference({ orderId }: { orderId: string }) {
+  const [feedback, setFeedback] = useState('');
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(orderId);
+      setFeedback('Reference copied.');
+    } catch {
+      setFeedback('Select the order reference to copy it.');
+    }
+  }
+
+  return <div className="copy-reference">
+    <button className="text-button" type="button" onClick={() => void copy()}>Copy reference</button>
+    {feedback && <span role="status" className="muted">{feedback}</span>}
+  </div>;
 }

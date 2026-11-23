@@ -50,12 +50,8 @@ function Login({ session, onLogin }: { session: Session; onLogin: () => Promise<
 
 function App() {
   const orderWorkspace = window.location.pathname.replace(/\/$/, '') === '/staff/orders';
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    let saved: string | null = null;
-    try { saved = localStorage.getItem('stockroom-theme'); } catch { /* Storage may be disabled. */ }
-    if (saved === 'light' || saved === 'dark') return saved;
-    return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  });
+  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
+    document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#162234' : '#ffffff');
@@ -97,14 +93,14 @@ function App() {
         <a href="/staff/orders" aria-current={orderWorkspace ? 'page' : undefined}>Orders</a>
       </nav>}
       <div className="header-actions">
-      <button className="quiet-light theme-toggle" type="button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-        <span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span> {theme === 'dark' ? 'Light mode' : 'Dark mode'}
-      </button>
-      {session?.user && <div className="account">
-        <div className="account-avatar" aria-hidden="true">{session.user.email[0].toUpperCase()}</div>
-        <div className="account-identity"><strong>{session.user.role === 'staff' ? 'Staff' : 'Customer'}</strong><span className="account-email">{session.user.email}</span></div>
-        <button className="quiet-light" onClick={logout} disabled={busy}>Sign out</button>
-      </div>}
+        <button className="theme-toggle" type="button" role="switch" aria-checked={theme === 'dark'}
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+          Dark mode <span className="switch-track" aria-hidden="true" />
+        </button>
+        {session?.user && <div className="account">
+          <div className="account-identity"><strong>{session.user.role === 'staff' ? 'Staff' : 'Customer'}</strong><span className="account-email">{session.user.email}</span></div>
+          <button className="quiet-light" onClick={logout} disabled={busy}>Sign out</button>
+        </div>}
       </div>
     </div></header>
     {error && <div className="global-error" role="alert">{error} <button className="text-button" onClick={() => void loadSession().catch(failure => setError(errorMessage(failure)))}>Retry</button></div>}

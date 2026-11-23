@@ -45,12 +45,18 @@ test('a recovered checkout confirms payment and staff can dispatch the whole ord
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.getByLabel('Email address')).toBeVisible();
   await signIn(page, 'customer');
-  const otherContext = await browser.newContext({ baseURL });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  const otherContext = await browser.newContext({ baseURL, viewport: { width: 360, height: 800 } });
   try {
     const other = await otherContext.newPage();
     await signIn(other, 'customer');
     for (const item of [a, b]) await addToBasket(page, item);
     for (const item of [c, a]) await addToBasket(other, item);
+    const basketLink = page.getByRole('link', { name: /View basket/ });
+    await expect(basketLink).toBeInViewport();
+    await basketLink.click();
+    await expect(page.getByRole('heading', { name: 'Basket', exact: true })).toBeFocused();
 
     let committedOrder;
     await page.route('**/api/orders', async route => {
@@ -69,8 +75,16 @@ test('a recovered checkout confirms payment and staff can dispatch the whole ord
     expect((await response.json()).orderId).toBe(committedOrder.orderId);
     const confirmedOrder = page.getByRole('listitem').filter({ hasText: `Order ${committedOrder.orderId}` });
     await expect(confirmedOrder.getByText('Confirmed', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await confirmedOrder.getByRole('button', { name: 'Copy reference' }).click();
+    await expect(confirmedOrder.getByText('Reference copied.')).toBeVisible();
+    const copiedReference = await page.evaluate(() => navigator.clipboard.readText());
+    expect(copiedReference).toBe(committedOrder.orderId);
     await expectAvailable(page, a, 0);
     await expectAvailable(page, b, 0);
+    await page.getByLabel('In stock only').check();
+    await expect(page.getByRole('heading', { name: 'No matching products' })).toBeVisible();
+    await page.getByRole('button', { name: 'Clear filters' }).click();
+    await expect(page.getByLabel('In stock only')).not.toBeChecked();
 
     const rejected = other.waitForResponse(response => matchesPost(response, '/api/orders'));
     await other.getByRole('button', { name: 'Submit order' }).click();
@@ -84,9 +98,12 @@ test('a recovered checkout confirms payment and staff can dispatch the whole ord
     await expect(other.getByLabel('Email address')).toBeVisible();
     await signIn(other, 'staff');
     await other.getByRole('link', { name: 'Orders', exact: true }).click();
-    await other.getByRole('searchbox', { name: 'Search by order reference or email' }).fill(committedOrder.orderId);
+    await other.getByRole('searchbox', { name: 'Search by order reference or email' }).fill(copiedReference);
     await other.getByRole('button', { name: 'Search', exact: true }).click();
-    await other.getByRole('button', { name: `Review order ${committedOrder.orderId}`, exact: true }).click();
+    const review = other.getByRole('button', { name: `Review order ${committedOrder.orderId}`, exact: true });
+    await expect(review).toBeInViewport();
+    expect(await other.getByRole('table', { name: 'Orders' }).evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    await review.click();
     const detail = other.getByRole('dialog', { name: 'Order details' });
     await expect(detail.getByRole('region', { name: 'Payment', exact: true })).toContainText('Approved');
     await expect(detail.getByText(`Checkout reservation · 1 × ${a.sku}`, { exact: true })).toBeVisible();
@@ -113,10 +130,11 @@ test('a recovered checkout confirms payment and staff can dispatch the whole ord
 test('dark mode persists and catalog pages follow the search filter', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' });
   await signIn(page, 'staff');
-  await page.getByRole('button', { name: 'Dark mode' }).click();
+  const themeSwitch = page.getByRole('switch', { name: 'Dark mode' });
+  await themeSwitch.click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Light mode' })).toBeVisible();
+  await expect(themeSwitch).toBeChecked();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 
   const session = await page.request.get('/api/session');
@@ -140,7 +158,8 @@ test('dark mode persists and catalog pages follow the search filter', async ({ p
   await search(page, `${marker}-1`);
   await expect(pages).toHaveCount(0);
   await expect(page.getByText(`${marker}-1`, { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Light mode' }).click();
+  await themeSwitch.click();
+  await expect(themeSwitch).not.toBeChecked();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 });
 
