@@ -1,0 +1,5 @@
+services:
+  retail:
+    environment:
+      ASPNETCORE_ENVIRONMENT: RecoveryTest
+

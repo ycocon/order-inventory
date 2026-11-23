@@ -1,0 +1,55 @@
+name: Retail verification
+on: [push, pull_request]
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run retail tests against PostgreSQL
+        run: dotnet test tests/Retail.IntegrationTests/Retail.IntegrationTests.csproj -c Release
+      - name: Build and start the demo
+        shell: pwsh
+        run: ./demo.ps1
+      - name: Check the workflow across a retail restart
+        shell: pwsh
+        run: |
+          $config = ConvertFrom-StringData (Get-Content .env -Raw)
+          ./tests/stock-smoke.ps1 -BaseUrl 'http://localhost:5188' -RetailService retail -StaffPassword $config.DEMO_STAFF_PASSWORD -CustomerPassword $config.DEMO_CUSTOMER_PASSWORD
+      - name: Check the payment simulator against PostgreSQL
+        shell: pwsh
+        run: ./tests/payment-smoke.ps1
+      - name: Run Playwright browser tests
+        working-directory: tests/e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm test
+      - name: Check payment outcomes and the last-unit race
+        shell: pwsh
+        run: ./tests/payment-flow.ps1
+      - name: Check RabbitMQ redelivery and timeline recovery
+        shell: pwsh
+        run: ./tests/timeline.ps1
+      - name: Package the tested demo
+        shell: pwsh
+        run: ./package.ps1 -IncludeImages
+      - name: Verify the extracted demo with the packaged images
+        shell: pwsh
+        run: ./tests/package-smoke.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: order-inventory-demo
+          path: release/order-inventory-demo-*
+          if-no-files-found: error
+      - name: Stop the test stack
+        if: always()
+        run: if [ -f .env ]; then docker compose down; fi

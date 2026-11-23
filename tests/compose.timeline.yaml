@@ -1,0 +1,11 @@
+services:
+  rabbitmq:
+    ports:
+      - "127.0.0.1::15672"
+  timeline-relay:
+    environment:
+      DOTNET_ENVIRONMENT: TimelineTest
+  timeline-reader:
+    environment:
+      DOTNET_ENVIRONMENT: TimelineTest
+

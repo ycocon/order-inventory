@@ -1,0 +1,4 @@
+{"ended":1795373409091,"offered":6000,"sent":6000,"admitted":6000,"rejected":0,"errors":0,"dropped":0,"submissionP95ms":71.56161200000008,"admittedP95ms":71.56161200000008}
+{"sku":"LOAD-614EFC77A9FE47EEA06007B217F63B92","paymentApprovals":6000,"balances":"6000|6000|6000|6000","pendingAtEnd":4,"completionP95seconds":5.809,"drainSeconds":0.35,"oldestPendingSeconds":0.243}
+{"ended":1795373714646,"offered":3000,"sent":3000,"admitted":3000,"rejected":0,"errors":0,"dropped":0,"submissionP95ms":1152.0506718999984,"admittedP95ms":1152.0506718999984}
+{"sku":"LOAD-0FD2CBB31B6D4D299EAC2288F82C1618","paymentApprovals":3000,"balances":"3000|3000|3000|3000","pendingAtEnd":1995,"completionP95seconds":44.159,"drainSeconds":45.576,"oldestPendingSeconds":20.31}

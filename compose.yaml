@@ -1,0 +1,105 @@
+x-retail-connection: &retail-connection Host=db;Database=retail;Username=retail_app;Password=${RETAIL_DB_PASSWORD:?Set the retail database password};Maximum Pool Size=40
+x-retail-image: &retail-image ${RETAIL_IMAGE:-${COMPOSE_PROJECT_NAME:-order-inventory}-retail}
+x-timeline-worker: &timeline-worker
+  image: *retail-image
+  pull_policy: never
+  depends_on:
+    retail:
+      condition: service_started
+    rabbitmq:
+      condition: service_healthy
+  environment:
+    ConnectionStrings__Retail: *retail-connection
+    Messaging__Password: ${RABBITMQ_PASSWORD:?Run demo.ps1 to generate the RabbitMQ password}
+    Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command: Warning
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: retail
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run demo.ps1 to generate local credentials}
+      RETAIL_DB_PASSWORD: ${RETAIL_DB_PASSWORD:?Set the retail database password}
+    volumes:
+      - database:/var/lib/postgresql
+      - ./infra/init-retail.sh:/docker-entrypoint-initdb.d/10-retail.sh:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "retail"]
+      interval: 2s
+      timeout: 3s
+      retries: 40
+
+  retail:
+    build: .
+    image: *retail-image
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__Retail: *retail-connection
+      Demo__StaffPassword: ${DEMO_STAFF_PASSWORD:?Set the demo staff password}
+      Demo__CustomerPassword: ${DEMO_CUSTOMER_PASSWORD:?Set the demo customer password}
+      Payments__SimulatorUrl: http://simulator:8080/
+      Messaging__TimelineEnabled: "true"
+      Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command: Warning
+    volumes:
+      - login-keys:/home/app/.aspnet/DataProtection-Keys
+    ports:
+      - "127.0.0.1:${RETAIL_PORT:-5188}:8080"
+
+  rabbitmq:
+    image: rabbitmq:4.4.1-management
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: timeline
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Run demo.ps1 to generate the RabbitMQ password}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "bash", "-ec", "exec 3<>/dev/tcp/127.0.0.1/5672"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  timeline-relay:
+    <<: *timeline-worker
+    command: ["--timeline-relay"]
+
+  timeline-reader:
+    <<: *timeline-worker
+    command: ["--timeline-reader"]
+
+  simulator-db-setup:
+    image: postgres:18
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Run demo.ps1 to generate local credentials}
+      SIMULATOR_DB_PASSWORD: ${SIMULATOR_DB_PASSWORD:?Run demo.ps1 to generate the simulator database password}
+    volumes:
+      - ./infra/init-payments.sh:/bootstrap/init-payments.sh:ro
+    entrypoint: ["/bin/sh", "/bootstrap/init-payments.sh"]
+
+  simulator:
+    image: ${SIMULATOR_IMAGE:-${COMPOSE_PROJECT_NAME:-order-inventory}-simulator}
+    build:
+      context: .
+      dockerfile: src/PaymentSimulator/Dockerfile
+    depends_on:
+      simulator-db-setup:
+        condition: service_completed_successfully
+    environment:
+      ConnectionStrings__Simulator: Host=db;Database=payment_simulator;Username=payment_simulator_app;Password=${SIMULATOR_DB_PASSWORD:?Run demo.ps1 to generate the simulator database password};Maximum Pool Size=10
+      Simulator__Decision: ${SIMULATOR_DECISION:-approved}
+      Simulator__AllowDropReply: "true"
+      Simulator__DropNewReplies: ${SIMULATOR_DROP_NEW_REPLIES:-false}
+    ports:
+      - "127.0.0.1:${SIMULATOR_PORT:-5189}:8080"
+
+volumes:
+  database:
+  login-keys:
+  rabbitmq-data:

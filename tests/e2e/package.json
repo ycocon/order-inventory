@@ -1,0 +1,12 @@
+{
+  "name": "retail-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "playwright test"
+  },
+  "type": "module",
+  "devDependencies": {
+    "@playwright/test": "1.65.1"
+  }
+}
